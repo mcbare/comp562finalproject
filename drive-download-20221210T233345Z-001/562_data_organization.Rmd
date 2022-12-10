@@ -1,0 +1,69 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+# read in clinical and genomic data of patients
+library(readr)
+cli_dat = read_tsv("E:/Lab/COMP562/proj/tmb_mskcc_2018/data_clinical_sample.txt", skip = 4)
+cli_dat
+cli_dat = cli_dat[c("PATIENT_ID", "SAMPLE_ID", "CANCER_TYPE", "AGE_AT_SEQ_REPORT", "TMB_NONSYNONYMOUS")]
+cli_dat
+```
+```{r}
+# merge clinical and genomic data
+gen_dat = read_tsv("E:/Lab/COMP562/proj/tmb_mskcc_2018/data_mutations.txt")
+gen_dat = unique(gen_dat[c("Hugo_Symbol", "Tumor_Sample_Barcode")])
+gen_dat
+cli_gen_dat = merge(gen_dat, cli_dat, by.x = 'Tumor_Sample_Barcode', by.y ='SAMPLE_ID', all= TRUE)
+# tumor samples without mutations will show N/A in the Hugo_Symbol column, change that to "No_Mutation"
+cli_gen_dat$Hugo_Symbol[is.na(cli_gen_dat$Hugo_Symbol)] <- "No_Mutation"
+cli_gen_dat = na.omit(cli_gen_dat)
+cli_gen_dat
+```
+
+```{r}
+# add mutation info
+cli_gen_dat.1 = cli_gen_dat
+gene_names = unique(cli_gen_dat$Hugo_Symbol)
+# gene_names = c("TP53")
+for (gene in gene_names) {
+  cli_gen_dat.1[gene] = ifelse(cli_gen_dat.1$Hugo_Symbol==gene, 1, 0)
+}
+cli_gen_dat.1
+cli_gen_dat.1 = subset(cli_gen_dat.1, select = -c(Hugo_Symbol) )
+cli_gen_dat.1
+```
+```{r}
+# remove redundancy
+library(dplyr)
+cli_gen_dat.2 = subset(cli_gen_dat.1, select = -c(Tumor_Sample_Barcode, CANCER_TYPE, AGE_AT_SEQ_REPORT, TMB_NONSYNONYMOUS))
+cli_gen_dat.2 = cli_gen_dat.2 %>% group_by(PATIENT_ID) %>% summarise_all(funs(sum))
+cli_gen_dat.2
+# merge mutation and clinical info
+cli_gen_dat.3 = unique(subset(cli_gen_dat.1, select = c(Tumor_Sample_Barcode, PATIENT_ID, CANCER_TYPE, AGE_AT_SEQ_REPORT, TMB_NONSYNONYMOUS)))
+cli_gen_dat.4 = merge(cli_gen_dat.3, cli_gen_dat.2, by ='PATIENT_ID')
+cli_gen_dat.4
+cli_gen_dat.5 = subset(cli_gen_dat.4, select = -c(No_Mutation) )
+cli_gen_dat.5
+```
+
+
+```{r}
+# add patient data (survival and sex)
+sur_dat = read_tsv("E:/Lab/COMP562/proj/tmb_mskcc_2018/data_clinical_patient.txt", skip=4)
+sur_dat = subset(sur_dat, select = c(PATIENT_ID, OS_STATUS, SEX) )
+final_dat = merge(sur_dat, cli_gen_dat.5, by="PATIENT_ID")
+final_dat = subset(final_dat, select = -c(Tumor_Sample_Barcode))
+final_dat
+```
+```{r}
+# write out data
+write.table(final_dat, file = "cancer_data.txt", sep = "\t", row.names = FALSE)
+write.csv(final_dat, file = "cancer_data.csv", row.names = FALSE)
+```
+
+
+
+
